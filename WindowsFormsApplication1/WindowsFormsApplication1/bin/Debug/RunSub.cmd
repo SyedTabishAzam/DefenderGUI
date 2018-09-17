@@ -2,4 +2,4 @@
 @echo off
 set PATH=%PATH%;%CD%\lib
 @echo on
-InitialSubscriber.exe -DCPSConfigFile rtps.ini
+DefenderInitialSubscriber.exe -DCPSConfigFile rtps.ini

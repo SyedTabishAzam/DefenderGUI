@@ -28,10 +28,11 @@ namespace WindowsFormsApplication1
 
         private void button1_Click(object sender, EventArgs e)
         {
-            label1.Text = "Finding Server";
-            bool success = FindServer();
-            StartCommandPublisher();
             button1.Enabled = false;
+            label1.Text = "Finding Server";
+            StartInitialSubscriber();
+            StartCommandPublisher();
+            
            
         }
 
@@ -40,18 +41,26 @@ namespace WindowsFormsApplication1
             string procName = "";
             if (proc == "Subscriber")
             {
-                procName = "InitialSubscriber";
+                procName = "DefenderInitialSubscriber";
             }
             if(proc=="Publisher")
             {
-                procName = "CommandPublisher";
+                procName = "DefenderCommandPublisher";
             }
             foreach (var processx in Process.GetProcessesByName(procName))
             {
-                processx.Kill();
+                try
+                {
+
+                    processx.Kill();
+                }
+                catch(Win32Exception e)
+                {
+
+                }
             }
         }
-        private bool FindServer()
+        private void StartInitialSubscriber()
         {
             Kill("Subscriber");
 
@@ -67,20 +76,20 @@ namespace WindowsFormsApplication1
 
             process.StartInfo.RedirectStandardError = true;
 
-            process.OutputDataReceived += new DataReceivedEventHandler(SortOutputHandler);
+            process.OutputDataReceived += new DataReceivedEventHandler(HandleSubscriberOutput);
 
             process.Start();
 
             process.BeginOutputReadLine();
 
             StaticClass.Subscriber = process;
-            return true;
+            
 
         }
 
  
 
-        public void SortOutputHandler(object sendingProcess, DataReceivedEventArgs outLine)
+        public void HandleSubscriberOutput(object sendingProcess, DataReceivedEventArgs outLine)
         {
             Console.WriteLine("sTILL BEING CALLED");
             string packet = outLine.Data;
@@ -114,12 +123,17 @@ namespace WindowsFormsApplication1
                 }
                 if (packet.Contains((CONNECTION_CODE.SCENERIO_UPDATE).ToString("d")))
                 {
-                    CheckFile(packet.Split('?')[1]);
-                    startGame = true;
+                    //End Of Entity symbol received
+                    if (!(packet.Split('?')[1].Contains("EOE>(NULL,NULL)")))
+                        CheckPacket(packet.Split('?')[1]);
+                    else
+                        //Now populate
+                        startGame = true;
                     finalCount++;
                 }
                 if(startGame)
                 {
+                    StaticClass.Subscriber.OutputDataReceived -= new DataReceivedEventHandler(HandleSubscriberOutput);
                     label1.BeginInvoke(new Action(() => label1.Text = "Game Started. Choose your entity and begin"));
                     label1.BeginInvoke(new Action(() => label1.ForeColor = Color.White));
                     label1.BeginInvoke(new Action(() => label1.BackColor = Color.Green));
@@ -145,7 +159,7 @@ namespace WindowsFormsApplication1
                 refreshList(entlist);
             }
         }
-        private void CheckFile(string str)
+        private void CheckPacket(string str)
         {
             var entitylist = str.Split('>');
             var entName = entitylist[0];
@@ -289,7 +303,7 @@ namespace WindowsFormsApplication1
 
         private void button2_Click(object sender, EventArgs e)
         {
-            StaticClass.Subscriber.OutputDataReceived -= new DataReceivedEventHandler(SortOutputHandler);
+            
             StaticClass.SelectedEntity = (Entity) comboBox1.SelectedItem;
             
 
@@ -300,6 +314,23 @@ namespace WindowsFormsApplication1
             Close();
             
            
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            
+            if (e.CloseReason == CloseReason.UserClosing)
+            {
+                ClearEverything();
+                Application.Exit();
+            }
+
+        }
+
+        private void ClearEverything()
+        {
+            Kill("Publisher");
+            Kill("Subscriber");
         }
 
         public void refreshList(List<Entity> list)
@@ -316,7 +347,7 @@ namespace WindowsFormsApplication1
 
         private void DefenderGUI_Load(object sender, EventArgs e)
         {
-            
+            FormClosing += Form1_FormClosing;
             this.comboBox1.DataSource = entlist;
             
             this.comboBox1.DisplayMember = "name";
